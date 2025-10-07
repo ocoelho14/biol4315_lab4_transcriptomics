@@ -69,19 +69,15 @@ rqcCycleBaseCallsLinePlot(qa_report[25:36]) + ggtitle("Base Calls: Files 25-36")
 library(QuasR)
 library(DT)
 
-#directory
 if (!dir.exists("processed_reads")) {
   dir.create("processed_reads")
 }
 
 for (i in seq_along(meta_data$FileName1)) {
-  
   current_file <- meta_data$FileName1[i]
-  
   base_name <- tools::file_path_sans_ext(basename(current_file), compression = TRUE)
   new_filename <- paste0(base_name, "_processed.fastq.gz")
   output_file <- file.path("processed_reads", new_filename)
-
   QuasR::preprocessReads(filename = current_file,
                          outputFilename = output_file,
                          truncateEndBases = 3,
@@ -91,21 +87,17 @@ for (i in seq_along(meta_data$FileName1)) {
   meta_data$FileName1[i] <- output_file
 }
 
-
-# Finally, display the correctly updated metadata table
 DT::datatable(meta_data)
 ```
 
 
 #q4
 ```{bash terminal, eval= FALSE}
-#to unzip file
 cd processed_reads
 (base) T450-XXXXXXX:processed_readsgunzip *.gz
 ```
 
 ```{r directories, eval= FALSE}
-#run this once for the directories 
 dir.create("sam_files", showWarnings = FALSE)
 dir.create("bam_files", showWarnings = FALSE)
 writeLines(c("sam_files/", "bam_files/"), con = ".gitignore")
@@ -113,27 +105,19 @@ writeLines(c("sam_files/", "bam_files/"), con = ".gitignore")
 
 ```{r align_reads_simple, eval= FALSE, message=TRUE, warning=TRUE}
 hisat2_index <- "./hisat2_index/tair10_1_index"
-
 for(i in seq_along(meta_data$FileName1)){
-  
-  
   sample_name <- meta_data$SampleName[i]
-  #print(sample_name)
   fastq_file <- gsub(".gz$", "", meta_data$FileName1[i])
-  #print(fastq_file)
-  
   sam_file <- file.path("sam_files", paste0(sample_name, ".sam"))
   bam_file <- file.path("bam_files", paste0(sample_name, ".bam"))
   sorted_bam_file <- file.path("bam_files", paste0(sample_name, "_sorted.bam"))
   log_file <- file.path("bam_files", paste0(sample_name, "_hisat2.log"))
-  
-  # is my file missing
+
   if (!file.exists(fastq_file)) {
     message("Skipping ", sample_name, ": FASTQ file not found.")
-    next # 'next' jumps to the next iteration of the loop
+    next 
   }
-  
-  # run HISAT2 
+
   hisat2_log <- tryCatch({
     system2("hisat2", args = c("-p", "8",
                               "-x", hisat2_index,
@@ -142,10 +126,7 @@ for(i in seq_along(meta_data$FileName1)){
             stdout = TRUE, stderr = TRUE)
   }, error = function(e) paste("HISAT2 failed:", e$message))
   
-  # write output from hisat2 to its log file
   writeLines(hisat2_log, log_file)
-  
-  # run sam tools 
   tryCatch({
     # 1. Convert SAM to BAM
     system2("samtools", args = c("view", "-bS", sam_file, "-o", bam_file))
@@ -157,34 +138,23 @@ for(i in seq_along(meta_data$FileName1)){
     message("Samtools failed for ", sample_name, ": ", e$message)
   })
 }
-
 print("complete.")
 ```
 
 #q5
 ```{r idos code, eval=FALSE} 
-# Copy and paste from idos lab 
-
-# get the folder
 hisat2_logs_dir <- "bam_files/" #changed this to my directory
 
 # 1. Get a list of all HISAT2 log files
 log_files <- list.files(hisat2_logs_dir, pattern = "*.log", full.names = TRUE) #changed this to *.log
-
-#preper an "empty" vector of the apropreate size, faster than appending. 
 percent_aligned <- 1:length(log_files)
 
-#loop through log files
 for (i in seq_along(percent_aligned)) {
-  
   percent_aligned[i] <- readLines(log_files[i])[length(readLines(log_files[i]))]
-  
 }
 
-#bind vectors as dataframe
 align_df <- data.frame(sort(meta_data$SampleName),percent_aligned)
 
-# extract the numeric percent value
 align_df <- align_df %>% 
   mutate(percent_aligned = as.numeric(
     stringr::str_split_i(align_df$percent_aligned, "%",1))) %>% 
@@ -192,8 +162,6 @@ align_df <- align_df %>%
 
 head(align_df)
 ```
-### **--------- Question 5 ---------**
-
 
 ```{r alignment_stats, echo=TRUE, message=FALSE, warning=FALSE}
 library(dplyr)
@@ -201,14 +169,9 @@ library(stringr)
 library(DT)
 library(ggplot2)
 
-
 log_dir <- "bam_files/"
-
 log_files <- list.files(log_dir, pattern = "_hisat2.log", full.names = TRUE)
-
-
 sample_names <- str_replace(basename(log_files), "_hisat2.log", "")
-
 alignment_rates <- sapply(log_files, function(file) {
   # Read the file once
   log_content <- readLines(file)
@@ -223,16 +186,13 @@ align_df <- data.frame(
   PercentAligned = alignment_rates
 )
 
-
 datatable(align_df,
           caption = "Overall Alignment Rate per Sample",
           options = list(pageLength = 10, autoWidth = TRUE),
           rownames = FALSE)
 
-
 ggplot(align_df, aes(y = PercentAligned)) +
-  geom_boxplot(fill = "pink", color = "maroon", outlier.colour = "blue") +
-  # Add individual points over the boxplot for better visibility
+  geom_boxplot(fill = "green", color = "red", outlier.colour = "blue") +
   labs(title = "Box Plot of Alignment Percentages",
        y = "Percent Aligned (%)",
        x = "") +
@@ -249,21 +209,17 @@ BiocManager::install("Rsubread")
 
 
 ```{r copy+paste from idos lab, eval = FALSE}
-#list bam files
-bfiles <- list.files("bam_files/", pattern = "_sorted.bam$", full.names = TRUE) #directoreis slightly changed 
+bfiles <- list.files("bam_files/", pattern = "_sorted.bam$", full.names = TRUE) 
 
-#Counting how many reads corespond to each gene
 gene_count_list <- Rsubread::featureCounts(files = bfiles, annot.ext = "GCF_000001735.4_TAIR10.1_genomic.gtf", 
-                        isGTFAnnotationFile = TRUE, # <--- input annotation is GTF
-                        allowMultiOverlap = FALSE,  # <--- don't allow reads that overlap with multiple loci
+                        isGTFAnnotationFile = TRUE, 
+                        allowMultiOverlap = FALSE,  
                         isPairedEnd = FALSE, nthreads = 8,
-                        minMQS = 10, # <--- minimum mapping quality score of 10 (like a phred score for the hisat2 alignment)
-                        GTF.featureType = "exon",  # <--- Count reads overlapping 'exon' features
-                        GTF.attrType = "gene_id" # <--- Groups exon by gene id
+                        minMQS = 10, 
+                        GTF.featureType = "exon",  
+                        GTF.attrType = "gene_id" 
                         )
 ```
-
-### **--------- Question 6 ---------**
 
 ```{r create_count_table, echo=TRUE, message=FALSE, warning=FALSE}
 library(Rsubread)
@@ -276,19 +232,15 @@ gene_counts <- featureCounts(
   files = bam_files,
   annot.ext = gtf_file,
   isGTFAnnotationFile = TRUE,
-  isPairedEnd = FALSE, # FALSE because alignment was done in single-end mode
-  GTF.featureType = "exon",    #count reads overlapping exons
-  GTF.attrType = "gene_id",    #group counts by gene ID
-  nthreads = 8                 #ise 8 threads to speed up counting
+  isPairedEnd = FALSE, 
+  GTF.featureType = "exon",    
+  GTF.attrType = "gene_id",    
+  nthreads = 8                
 )
-
 
 count_table <- gene_counts$counts
 colnames(count_table) <- gsub("_sorted.bam", "", colnames(count_table))# remove the "_sorted.bam" suffix
-
-
 count_table <- count_table[rowSums(count_table) > 0, ]
-
 
 DT::datatable(count_table,
           caption = "Gene Read Counts per Sample (Filtered)",
@@ -299,13 +251,8 @@ DT::datatable(count_table,
 ```{r create_deseq_objects, message=FALSE, warning=FALSE}
 library(DESeq2)
 filter_and_count <- function(res_obj, comparison_name, fc_threshold = 2) {
-  # Remove NAs
   res_filtered <- res_obj[!is.na(res_obj$padj) & !is.na(res_obj$log2FoldChange), ]
-  
-  # Apply filters: |log2FC| >= log2(2) = 1 and padj <= alpha (already set in results())
   sig_genes <- res_filtered[abs(res_filtered$log2FoldChange) >= log2(fc_threshold), ]
-  
-  # Count up and down regulated
   up_regulated <- sum(sig_genes$log2FoldChange > 0)
   down_regulated <- sum(sig_genes$log2FoldChange < 0)
   
@@ -328,22 +275,14 @@ coldata$type <- factor(rep("single-read", nrow(coldata)))
 
 coldata <- coldata[match(colnames(count_table), rownames(coldata)), ]
 
-# Final check that the order is correct
 all(rownames(coldata) == colnames(count_table))
 
-
-# combines your raw count_table with the coldata into a single object.
 dds2 <- DESeqDataSetFromMatrix(countData = count_table,
                                colData = coldata,
                                design = ~ Factor)
 
-
-# -run the DESeq Analysis ---
-# This performs the actual differential expression analysis
 dds2_results <- DESeq(dds2)
 ```
-
-### **--------- Question 7 ---------**
 
 ```{r final_deseq2_analysis, echo=TRUE, message=FALSE, warning=FALSE}
 targets_path <- system.file("extdata", "param", "targetsPE.txt", package = "systemPipeRdata")
@@ -388,4 +327,4 @@ ggplot(plot_data, aes(x = Comparison, y = Count, fill = Regulation)) +
 ```
 
 #q8
-the reason the samples cluster so much better now is simple: my first analysis was noisy because it included every single gene, but this heatmap only uses the genes that actually responded to the treatment. By filtering out the noise from all the unchanging genes, the real biological patterns emerge. This result makes much more sense, as the heatmap now clearly shows how the plant reacts differently to the mock, avirulent, and virulent challenges.
+The samples cluster much better now because this analysis focuses only on genes that responded to the treatment. Before the analysis, included all genes which creates noise from genes that didn’t change. Filtering out unresponsive genes lets the true results show better. Becasue of this the new heatmap shows distinct expression patterns that reflect how the plant responds differently to the different treatments.
